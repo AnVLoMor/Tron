@@ -20,8 +20,9 @@ public class Motorcycle
     public Stack<Power> Powers { get; private set; }
     public bool IsDestroyed { get; set; }
     public Direction CurrentDirection { get; set; }
+    public bool IsPlayer { get; set; }
 
-    public Motorcycle(int startX, int startY)
+    public Motorcycle(int startX, int startY, bool isPlayer)
     {
         Speed = new Random().Next(1, 11);
         Fuel = 100;
@@ -30,15 +31,16 @@ public class Motorcycle
         Powers = new Stack<Power>();
         IsDestroyed = false;
         CurrentDirection = Direction.Right;
+        IsPlayer = isPlayer;
 
-        // Inicializa la moto y la estela
+        // Initialize the motorcycle and its trail
         Trail.AddLast(new Cell { X = startX, Y = startY });
         Trail.AddLast(new Cell { X = startX, Y = startY + 1 });
         Trail.AddLast(new Cell { X = startX, Y = startY + 2 });
         Trail.AddLast(new Cell { X = startX, Y = startY + 3 });
     }
 
-    public void Move()
+    public void Move(Map map)
     {
         if (Fuel <= 0)
         {
@@ -48,13 +50,30 @@ public class Motorcycle
 
         Cell nextPosition = GetNextPosition(CurrentDirection);
 
+        // Check if the next position is out of bounds
+        if (nextPosition.X < 0 || nextPosition.X >= map.Width || nextPosition.Y < 0 || nextPosition.Y >= map.Height)
+        {
+            IsDestroyed = true;
+            return;
+        }
+
+        // Check if colliding with own trail
+        foreach (var cell in Trail)
+        {
+            if (nextPosition.X == cell.X && nextPosition.Y == cell.Y)
+            {
+                IsDestroyed = true;
+                return;
+            }
+        }
+
         Trail.AddFirst(nextPosition);
-        if (Trail.Count > 4) // Limita la estela a 3 posiciones más la cabeza
+        if (Trail.Count > 4) // Limit the trail to 3 positions plus the head
         {
             Trail.RemoveLast();
         }
 
-        Fuel -= Speed / 5;
+        Fuel -= Speed / 20; // Reduced fuel consumption
     }
 
     private Cell GetNextPosition(Direction direction)
@@ -89,9 +108,13 @@ public class Map
 {
     public LinkedList<Cell> Grid { get; private set; }
     public List<Power> PowersOnMap { get; private set; }
+    public int Width { get; private set; }
+    public int Height { get; private set; }
 
     public Map(int width, int height)
     {
+        this.Width = width;
+        this.Height = height;
         Grid = new LinkedList<Cell>();
         PowersOnMap = new List<Power>();
 
@@ -105,13 +128,34 @@ public class Map
     {
         Random rnd = new Random();
 
-        // Generar poderes aleatorios en posiciones aleatorias
-        for (int i = 0; i < 10; i++) // Por ejemplo, 10 poderes
+        // Generate random powers in random positions
+        for (int i = 0; i < 10; i++)
         {
-            int x = rnd.Next(0, 20);
-            int y = rnd.Next(0, 20);
+            int x = rnd.Next(0, Width);
+            int y = rnd.Next(0, Height);
             PowersOnMap.Add(new Power(Power.PowerType.Shield) { Location = new Cell { X = x, Y = y } });
         }
+    }
+
+    public Power CheckPowerCollision(Cell position)
+    {
+        Power collidedPower = null;
+
+        foreach (var power in PowersOnMap)
+        {
+            if (power.Location.X == position.X && power.Location.Y == position.Y)
+            {
+                collidedPower = power;
+                break;
+            }
+        }
+
+        if (collidedPower != null)
+        {
+            PowersOnMap.Remove(collidedPower); // Remove the power from the map
+        }
+
+        return collidedPower;
     }
 }
 
@@ -185,14 +229,17 @@ public class Game
         map = new Map(width, height);
         motorcycles = new List<Motorcycle>();
 
-        // Inicializa la moto del jugador en una posición fija
-        playerMotorcycle = new Motorcycle(5, 5);
+        // Initialize the player's motorcycle in a fixed position
+        playerMotorcycle = new Motorcycle(5, 5, true);
         motorcycles.Add(playerMotorcycle);
 
-        // Inicializa los enemigos (bots)
+        // Initialize enemy motorcycles in random positions
+        Random rnd = new Random();
         for (int i = 1; i < numPlayers; i++)
         {
-            motorcycles.Add(new Motorcycle(5 + i * 3, 5)); // Ejemplo: motos en filas distintas
+            int x = rnd.Next(0, width);
+            int y = rnd.Next(0, height);
+            motorcycles.Add(new Motorcycle(x, y, false));
         }
 
         map.SpawnItemsAndPowers();
@@ -208,7 +255,6 @@ public class Game
         return playerMotorcycle;
     }
 
-    // Nuevo método GetMap para acceder al mapa
     public Map GetMap()
     {
         return map;
@@ -220,7 +266,30 @@ public class Game
         {
             if (!motorcycle.IsDestroyed)
             {
-                motorcycle.Move();
+                motorcycle.Move(map);
+
+                // Check for collisions with powers
+                var collidedPower = map.CheckPowerCollision(motorcycle.Trail.First.Value);
+                if (collidedPower != null)
+                {
+                    collidedPower.Activate(motorcycle);
+                }
+
+                // Check for collisions with other motorcycles
+                foreach (var otherMotorcycle in motorcycles)
+                {
+                    if (motorcycle != otherMotorcycle && !otherMotorcycle.IsDestroyed)
+                    {
+                        foreach (var cell in otherMotorcycle.Trail)
+                        {
+                            if (motorcycle.Trail.First.Value.X == cell.X && motorcycle.Trail.First.Value.Y == cell.Y)
+                            {
+                                motorcycle.IsDestroyed = true;
+                                break;
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -236,11 +305,13 @@ public class GameForm : Form
         this.game = gameInstance;
         this.DoubleBuffered = true;
         this.KeyDown += new KeyEventHandler(OnKeyDown);
-        this.Width = 800;
-        this.Height = 600;
+
+        // Set a fixed size for the window based on the map size
+        this.Width = gameInstance.GetMap().Width * 20;
+        this.Height = gameInstance.GetMap().Height * 20;
 
         gameTimer = new Timer();
-        gameTimer.Interval = 100; // 10 cuadros por segundo
+        gameTimer.Interval = 100; // 10 frames per second
         gameTimer.Tick += new EventHandler(UpdateGame);
         gameTimer.Start();
     }
@@ -259,13 +330,14 @@ public class GameForm : Form
 
         foreach (var motorcycle in game.GetMotorcycles())
         {
+            Brush brush = motorcycle.IsPlayer ? Brushes.Blue : Brushes.Yellow;
             foreach (var cell in motorcycle.Trail)
             {
-                g.FillRectangle(Brushes.Blue, new Rectangle(cell.X * 20, cell.Y * 20, 20, 20));
+                g.FillRectangle(brush, new Rectangle(cell.X * 20, cell.Y * 20, 20, 20));
             }
         }
 
-        // Dibujar poderes en el mapa
+        // Draw powers on the map
         foreach (var power in game.GetMap().PowersOnMap)
         {
             g.FillRectangle(Brushes.Red, new Rectangle(power.Location.X * 20, power.Location.Y * 20, 20, 20));
@@ -301,7 +373,7 @@ public static class Program
     {
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        Game game = new Game(20, 20, 5); // 1 jugador + 4 enemigos
-        Application.Run(new GameForm(game)); // Pasa la instancia de game a GameForm
+        Game game = new Game(50, 40, 5); // 1 player + 4 enemies
+        Application.Run(new GameForm(game)); // Pass the game instance to GameForm
     }
 }
