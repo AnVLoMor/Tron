@@ -21,17 +21,19 @@ public class Motorcycle
     public bool IsDestroyed { get; set; }
     public Direction CurrentDirection { get; set; }
     public bool IsPlayer { get; set; }
+    private int movesSinceLastFuelDecrease;
 
     public Motorcycle(int startX, int startY, bool isPlayer)
     {
         Speed = new Random().Next(1, 11);
-        Fuel = 100;
+        Fuel = 100; // Always start with 100 fuel
         Trail = new LinkedList<Cell>();
         Items = new Queue<Item>();
         Powers = new Stack<Power>();
         IsDestroyed = false;
-        CurrentDirection = Direction.Right;
+        CurrentDirection = (Direction)new Random().Next(4); // Random initial direction
         IsPlayer = isPlayer;
+        movesSinceLastFuelDecrease = 0;
 
         // Initialize the motorcycle and its trail
         Trail.AddLast(new Cell { X = startX, Y = startY });
@@ -42,38 +44,102 @@ public class Motorcycle
 
     public void Move(Map map)
     {
-        if (Fuel <= 0)
+        if (Fuel <= 0 || IsDestroyed)
         {
             IsDestroyed = true;
             return;
         }
 
-        Cell nextPosition = GetNextPosition(CurrentDirection);
-
-        // Check if the next position is out of bounds
-        if (nextPosition.X < 0 || nextPosition.X >= map.Width || nextPosition.Y < 0 || nextPosition.Y >= map.Height)
+        if (!IsPlayer)
         {
-            IsDestroyed = true;
-            return;
-        }
-
-        // Check if colliding with own trail
-        foreach (var cell in Trail)
-        {
-            if (nextPosition.X == cell.X && nextPosition.Y == cell.Y)
+            // Intentar cambiar la dirección aleatoriamente hasta encontrar una que no lleve a un choque
+            Direction originalDirection = CurrentDirection;
+            for (int i = 0; i < 4; i++)
             {
-                IsDestroyed = true;
-                return;
+                CurrentDirection = (Direction)new Random().Next(4);
+                Cell nextPosition = GetNextPosition(CurrentDirection);
+
+                // Comprobar si la siguiente posición está fuera de los límites o colisiona con alguna estela
+                if (nextPosition.X >= 0 && nextPosition.X < map.Width && nextPosition.Y >= 0 && nextPosition.Y < map.Height)
+                {
+                    bool collision = false;
+
+                    foreach (var motorcycle in map.Motorcycles)
+                    {
+                        foreach (var cell in motorcycle.Trail)
+                        {
+                            if (nextPosition.X == cell.X && nextPosition.Y == cell.Y)
+                            {
+                                collision = true;
+                                break;
+                            }
+                        }
+                        if (collision) break;
+                    }
+
+                    if (!collision)
+                    {
+                        break; // Encontró una dirección válida, salir del bucle
+                    }
+                }
+            }
+
+            // Si después de intentar cambiar dirección no encontró una válida, mantener la dirección original
+            if (CurrentDirection == originalDirection)
+            {
+                Cell originalNextPosition = GetNextPosition(CurrentDirection);
+                if (originalNextPosition.X < 0 || originalNextPosition.X >= map.Width || originalNextPosition.Y < 0 || originalNextPosition.Y >= map.Height)
+                {
+                    IsDestroyed = true;
+                    return;
+                }
             }
         }
 
-        Trail.AddFirst(nextPosition);
-        if (Trail.Count > 4) // Limit the trail to 3 positions plus the head
+        Cell finalPosition = GetNextPosition(CurrentDirection);
+
+        // Check if the final position is out of bounds
+        if (finalPosition.X < 0 || finalPosition.X >= map.Width || finalPosition.Y < 0 || finalPosition.Y >= map.Height)
+        {
+            IsDestroyed = true;
+            return;
+        }
+
+        // Check if colliding with any trail (including own trail)
+        foreach (var motorcycle in map.Motorcycles)
+        {
+            foreach (var cell in motorcycle.Trail)
+            {
+                if (motorcycle != this || !cell.Equals(Trail.First.Value))
+                {
+                    if (finalPosition.X == cell.X && finalPosition.Y == cell.Y)
+                    {
+                        IsDestroyed = true;
+                        return;
+                    }
+                }
+            }
+        }
+
+        Trail.AddFirst(finalPosition);
+        if (Trail.Count > 4)
         {
             Trail.RemoveLast();
         }
 
-        Fuel -= Speed / 20; // Reduced fuel consumption
+        if (IsPlayer)
+        {
+            movesSinceLastFuelDecrease++;
+            if (movesSinceLastFuelDecrease >= 5)
+            {
+                Fuel -= 1; // Reduce fuel by 1 every 5 moves
+                movesSinceLastFuelDecrease = 0;
+            }
+        }
+        else
+        {
+            Fuel = 100; // Enemies have infinite fuel
+        }
     }
 
     private Cell GetNextPosition(Direction direction)
@@ -110,6 +176,7 @@ public class Map
     public List<Power> PowersOnMap { get; private set; }
     public int Width { get; private set; }
     public int Height { get; private set; }
+    public List<Motorcycle> Motorcycles { get; private set; }
 
     public Map(int width, int height)
     {
@@ -117,6 +184,7 @@ public class Map
         this.Height = height;
         Grid = new LinkedList<Cell>();
         PowersOnMap = new List<Power>();
+        Motorcycles = new List<Motorcycle>();
 
         for (int i = 0; i < width * height; i++)
         {
@@ -133,7 +201,8 @@ public class Map
         {
             int x = rnd.Next(0, Width);
             int y = rnd.Next(0, Height);
-            PowersOnMap.Add(new Power(Power.PowerType.Shield) { Location = new Cell { X = x, Y = y } });
+            Power.PowerType randomPowerType = (Power.PowerType)rnd.Next(3); // Random power type
+            PowersOnMap.Add(new Power(randomPowerType) { Location = new Cell { X = x, Y = y } });
         }
     }
 
@@ -195,7 +264,7 @@ public class Item
 
 public class Power
 {
-    public enum PowerType { Shield, HyperSpeed }
+    public enum PowerType { Fuel, Shield, HyperSpeed }
     public PowerType Type { get; private set; }
     public Cell Location { get; set; }
 
@@ -208,6 +277,9 @@ public class Power
     {
         switch (Type)
         {
+            case PowerType.Fuel:
+                motorcycle.Fuel = Math.Min(100, motorcycle.Fuel + 20);
+                break;
             case PowerType.Shield:
                 // Logic to make the motorcycle invincible
                 break;
@@ -243,6 +315,7 @@ public class Game
         }
 
         map.SpawnItemsAndPowers();
+        map.Motorcycles.AddRange(motorcycles);
     }
 
     public List<Motorcycle> GetMotorcycles()
@@ -274,23 +347,33 @@ public class Game
                 {
                     collidedPower.Activate(motorcycle);
                 }
-
-                // Check for collisions with other motorcycles
-                foreach (var otherMotorcycle in motorcycles)
-                {
-                    if (motorcycle != otherMotorcycle && !otherMotorcycle.IsDestroyed)
-                    {
-                        foreach (var cell in otherMotorcycle.Trail)
-                        {
-                            if (motorcycle.Trail.First.Value.X == cell.X && motorcycle.Trail.First.Value.Y == cell.Y)
-                            {
-                                motorcycle.IsDestroyed = true;
-                                break;
-                            }
-                        }
-                    }
-                }
             }
+        }
+    }
+
+    public void Draw(Graphics g)
+    {
+        foreach (var cell in map.Grid)
+        {
+            g.FillRectangle(Brushes.Green, cell.X * 20, cell.Y * 20, 20, 20);
+        }
+
+        // Draw the boundaries of the map in black
+        Pen boundaryPen = new Pen(Color.Black, 5);
+        g.DrawRectangle(boundaryPen, 0, 0, map.Width * 20, map.Height * 20);
+
+        foreach (var motorcycle in motorcycles)
+        {
+            Brush brush = motorcycle.IsPlayer ? Brushes.Blue : Brushes.Red;
+            foreach (var cell in motorcycle.Trail)
+            {
+                g.FillRectangle(brush, cell.X * 20, cell.Y * 20, 20, 20);
+            }
+        }
+
+        foreach (var power in map.PowersOnMap)
+        {
+            g.FillRectangle(Brushes.Yellow, power.Location.X * 20, power.Location.Y * 20, 20, 20);
         }
     }
 }
@@ -298,82 +381,58 @@ public class Game
 public class GameForm : Form
 {
     private Game game;
-    private Timer gameTimer;
 
-    public GameForm(Game gameInstance)
+    public GameForm()
     {
-        this.game = gameInstance;
+        this.Width = 800;
+        this.Height = 600;
+        game = new Game(40, 30, 4); // Example dimensions and player count
         this.DoubleBuffered = true;
-        this.KeyDown += new KeyEventHandler(OnKeyDown);
-
-        // Set a fixed size for the window based on the map size
-        this.Width = gameInstance.GetMap().Width * 20;
-        this.Height = gameInstance.GetMap().Height * 20;
-
-        gameTimer = new Timer();
-        gameTimer.Interval = 100; // 10 frames per second
-        gameTimer.Tick += new EventHandler(UpdateGame);
-        gameTimer.Start();
+        this.Paint += new PaintEventHandler(GameForm_Paint);
+        this.KeyDown += new KeyEventHandler(GameForm_KeyDown);
+        Timer timer = new Timer();
+        timer.Interval = 100;
+        timer.Tick += new EventHandler(GameLoop);
+        timer.Start();
     }
 
-    private void UpdateGame(object sender, EventArgs e)
+    private void GameForm_Paint(object sender, PaintEventArgs e)
+    {
+        game.Draw(e.Graphics);
+    }
+
+    private void GameForm_KeyDown(object sender, KeyEventArgs e)
+    {
+        var player = game.GetPlayerMotorcycle();
+        switch (e.KeyCode)
+        {
+            case Keys.Up:
+                player.CurrentDirection = Direction.Up;
+                break;
+            case Keys.Down:
+                player.CurrentDirection = Direction.Down;
+                break;
+            case Keys.Left:
+                player.CurrentDirection = Direction.Left;
+                break;
+            case Keys.Right:
+                player.CurrentDirection = Direction.Right;
+                break;
+            case Keys.Space:
+                player.UsePower();
+                break;
+        }
+    }
+
+    private void GameLoop(object sender, EventArgs e)
     {
         game.Update();
         this.Invalidate();
     }
 
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        base.OnPaint(e);
-
-        Graphics g = e.Graphics;
-
-        foreach (var motorcycle in game.GetMotorcycles())
-        {
-            Brush brush = motorcycle.IsPlayer ? Brushes.Blue : Brushes.Yellow;
-            foreach (var cell in motorcycle.Trail)
-            {
-                g.FillRectangle(brush, new Rectangle(cell.X * 20, cell.Y * 20, 20, 20));
-            }
-        }
-
-        // Draw powers on the map
-        foreach (var power in game.GetMap().PowersOnMap)
-        {
-            g.FillRectangle(Brushes.Red, new Rectangle(power.Location.X * 20, power.Location.Y * 20, 20, 20));
-        }
-    }
-
-    private void OnKeyDown(object sender, KeyEventArgs e)
-    {
-        Motorcycle playerMotorcycle = game.GetPlayerMotorcycle();
-
-        switch (e.KeyCode)
-        {
-            case Keys.Up:
-                playerMotorcycle.CurrentDirection = Direction.Up;
-                break;
-            case Keys.Down:
-                playerMotorcycle.CurrentDirection = Direction.Down;
-                break;
-            case Keys.Left:
-                playerMotorcycle.CurrentDirection = Direction.Left;
-                break;
-            case Keys.Right:
-                playerMotorcycle.CurrentDirection = Direction.Right;
-                break;
-        }
-    }
-}
-
-public static class Program
-{
     [STAThread]
     static void Main()
     {
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
-        Game game = new Game(50, 40, 5); // 1 player + 4 enemies
-        Application.Run(new GameForm(game)); // Pass the game instance to GameForm
+        Application.Run(new GameForm());
     }
 }
