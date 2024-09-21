@@ -384,9 +384,10 @@ public class GameForm : Form
 
     public GameForm()
     {
-        this.Width = 800;
-        this.Height = 600;
-        game = new Game(40, 30, 4); // Example dimensions and player count
+        this.Width = 1000;
+        this.Height = 800;
+        this.StartPosition = FormStartPosition.CenterScreen; // Centra el formulario
+        game = new Game(40, 30, 4); // Ejemplo de dimensiones y cantidad de jugadores
         this.DoubleBuffered = true;
         this.Paint += new PaintEventHandler(GameForm_Paint);
         this.KeyDown += new KeyEventHandler(GameForm_KeyDown);
