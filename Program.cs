@@ -413,6 +413,7 @@ public class Game
 public class GameForm : Form
 {
     private Game game;
+    private Timer gameTimer;
 
     public GameForm()
     {
@@ -425,10 +426,11 @@ public class GameForm : Form
         this.Paint += new PaintEventHandler(GameForm_Paint);
         this.KeyDown += new KeyEventHandler(GameForm_KeyDown);
         this.Resize += new EventHandler(GameForm_Resize);
-        Timer timer = new Timer();
-        timer.Interval = 100;
-        timer.Tick += new EventHandler(GameLoop);
-        timer.Start();
+        
+        gameTimer = new Timer();
+        gameTimer.Interval = 150; // Increased from 100 to 200 ms to slow down the game
+        gameTimer.Tick += new EventHandler(GameLoop);
+        gameTimer.Start();
     }
 
     private void GameForm_Paint(object sender, PaintEventArgs e)
