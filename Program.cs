@@ -218,7 +218,7 @@ public class Map
         {
             int x = rnd.Next(0, Width);
             int y = rnd.Next(0, Height);
-            Power.PowerType randomPowerType = (Power.PowerType)rnd.Next(3); // Random power type
+            Power.PowerType randomPowerType = (Power.PowerType)rnd.Next(4); // Random power type
             PowersOnMap.Add(new Power(randomPowerType) { Location = new Cell { X = x, Y = y } });
         }
     }
@@ -281,8 +281,8 @@ public class Item
 
 public class Power
 {
-    public enum PowerType { Fuel, Shield, HyperSpeed }
-    public PowerType Type { get; private set; }
+    public enum PowerType { Fuel, Shield, HyperSpeed, Bomb }
+    public PowerType Type { get; set; }
     public Cell Location { get; set; }
 
     public Power(PowerType type)
@@ -393,6 +393,7 @@ public class Game
         Pen boundaryPen = new Pen(Color.Black, 3);
         g.DrawRectangle(boundaryPen, offsetX, offsetY, map.Width * cellSize, map.Height * cellSize);
 
+        // Dibuja las motocicletas y sus estelas
         foreach (var motorcycle in motorcycles)
         {
             Brush brush = motorcycle.IsPlayer ? new SolidBrush(Color.FromArgb(173, 216, 230)) : Brushes.Red; // Celeste claro
@@ -402,9 +403,29 @@ public class Game
             }
         }
 
+        // Dibuja los poderes en el mapa
         foreach (var power in map.PowersOnMap)
         {
-            g.FillRectangle(Brushes.Yellow, offsetX + power.Location.X * cellSize, offsetY + power.Location.Y * cellSize, cellSize, cellSize);
+            Brush powerBrush;
+            switch (power.Type)
+            {
+                case Power.PowerType.Shield:
+                    powerBrush = Brushes.Purple; // Morado para el escudo
+                    break;
+                case Power.PowerType.HyperSpeed:
+                    powerBrush = Brushes.Yellow; // Amarillo para la hipervelocidad
+                    break;
+                case Power.PowerType.Fuel:
+                    powerBrush = Brushes.Green; // Verde para la gasolina
+                    break;
+                case Power.PowerType.Bomb:
+                    powerBrush = Brushes.Orange; // Anaranjado para las bombas
+                    break;
+                default:
+                    powerBrush = Brushes.Gray; // Valor por defecto para evitar errores
+                    break;
+            }
+            g.FillRectangle(powerBrush, offsetX + power.Location.X * cellSize, offsetY + power.Location.Y * cellSize, cellSize, cellSize);
         }
     }
 
