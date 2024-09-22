@@ -22,24 +22,26 @@ public class Motorcycle
     public Direction CurrentDirection { get; set; }
     public bool IsPlayer { get; set; }
     private int movesSinceLastFuelDecrease;
+    private int maxTrailLength = 10;
 
     public Motorcycle(int startX, int startY, bool isPlayer)
     {
         Speed = new Random().Next(1, 11);
-        Fuel = 100; // Always start with 100 fuel
+        Fuel = 100;
         Trail = new LinkedList<Cell>();
         Items = new Queue<Item>();
         Powers = new Stack<Power>();
         IsDestroyed = false;
-        CurrentDirection = (Direction)new Random().Next(4); // Random initial direction
+        CurrentDirection = (Direction)new Random().Next(4);
         IsPlayer = isPlayer;
         movesSinceLastFuelDecrease = 0;
 
-        // Initialize the motorcycle and its trail
-        Trail.AddLast(new Cell { X = startX, Y = startY });
-        Trail.AddLast(new Cell { X = startX, Y = startY + 1 });
-        Trail.AddLast(new Cell { X = startX, Y = startY + 2 });
-        Trail.AddLast(new Cell { X = startX, Y = startY + 3 });
+        // Inicializar la motocicleta y su estela con 11 elementos (1 moto + 10 de estela)
+        Trail.AddLast(new Cell { X = startX, Y = startY }); // Moto
+        for (int i = 1; i <= 3; i++)
+        {
+            Trail.AddLast(new Cell { X = startX, Y = startY + i }); // Estela
+        }
     }
 
     public void Move(Map map)
@@ -121,12 +123,20 @@ public class Motorcycle
             }
         }
 
+        // Añadir la nueva posición al inicio de la estela
         Trail.AddFirst(finalPosition);
-        if (Trail.Count > 4)
+
+        if (Trail.Count <= maxTrailLength + 1)
         {
+            // No eliminamos el último elemento si aún no hemos alcanzado la longitud máxima
+        }
+        else
+        {
+            // Si hemos alcanzado la longitud máxima, eliminamos el último elemento
             Trail.RemoveLast();
         }
 
+        // Reducción de combustible
         if (IsPlayer)
         {
             movesSinceLastFuelDecrease++;
