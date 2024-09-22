@@ -52,45 +52,30 @@ public class Motorcycle
             return;
         }
 
+        Cell nextPosition;
         if (!IsPlayer)
         {
-            // Intentar cambiar la dirección aleatoriamente hasta encontrar una que no lleve a un choque
-            Direction originalDirection = CurrentDirection;
-            for (int i = 0; i < 4; i++)
+            ChooseSafeDirection(map);
+        }
+        
+        nextPosition = GetNextPosition(CurrentDirection);
+
+        // Check if the next position is out of bounds or colliding with any trail
+        if (!IsSafePosition(nextPosition, map))
+        {
+            if (IsPlayer)
             {
-                CurrentDirection = (Direction)new Random().Next(4);
-                Cell nextPosition = GetNextPosition(CurrentDirection);
-
-                // Comprobar si la siguiente posición está fuera de los límites o colisiona con alguna estela
-                if (nextPosition.X >= 0 && nextPosition.X < map.Width && nextPosition.Y >= 0 && nextPosition.Y < map.Height)
-                {
-                    bool collision = false;
-
-                    foreach (var motorcycle in map.Motorcycles)
-                    {
-                        foreach (var cell in motorcycle.Trail)
-                        {
-                            if (nextPosition.X == cell.X && nextPosition.Y == cell.Y)
-                            {
-                                collision = true;
-                                break;
-                            }
-                        }
-                        if (collision) break;
-                    }
-
-                    if (!collision)
-                    {
-                        break; // Encontró una dirección válida, salir del bucle
-                    }
-                }
+                IsDestroyed = true;
+                return;
             }
-
-            // Si después de intentar cambiar dirección no encontró una válida, mantener la dirección original
-            if (CurrentDirection == originalDirection)
+            else
             {
-                Cell originalNextPosition = GetNextPosition(CurrentDirection);
-                if (originalNextPosition.X < 0 || originalNextPosition.X >= map.Width || originalNextPosition.Y < 0 || originalNextPosition.Y >= map.Height)
+                // If it's an enemy, try to find a safe direction again
+                ChooseSafeDirection(map);
+                nextPosition = GetNextPosition(CurrentDirection);
+                
+                // If still not safe, destroy the enemy
+                if (!IsSafePosition(nextPosition, map))
                 {
                     IsDestroyed = true;
                     return;
@@ -98,51 +83,22 @@ public class Motorcycle
             }
         }
 
-        Cell finalPosition = GetNextPosition(CurrentDirection);
+        // Move to the next position
+        Trail.AddFirst(nextPosition);
 
-        // Check if the final position is out of bounds
-        if (finalPosition.X < 0 || finalPosition.X >= map.Width || finalPosition.Y < 0 || finalPosition.Y >= map.Height)
+        // Manage trail length
+        if (Trail.Count > maxTrailLength + 1)
         {
-            IsDestroyed = true;
-            return;
-        }
-
-        // Check if colliding with any trail (including own trail)
-        foreach (var motorcycle in map.Motorcycles)
-        {
-            foreach (var cell in motorcycle.Trail)
-            {
-                if (motorcycle != this || !cell.Equals(Trail.First.Value))
-                {
-                    if (finalPosition.X == cell.X && finalPosition.Y == cell.Y)
-                    {
-                        IsDestroyed = true;
-                        return;
-                    }
-                }
-            }
-        }
-
-        // Añadir la nueva posición al inicio de la estela
-        Trail.AddFirst(finalPosition);
-
-        if (Trail.Count <= maxTrailLength + 1)
-        {
-            // No eliminamos el último elemento si aún no hemos alcanzado la longitud máxima
-        }
-        else
-        {
-            // Si hemos alcanzado la longitud máxima, eliminamos el último elemento
             Trail.RemoveLast();
         }
 
-        // Reducción de combustible
+        // Fuel management
         if (IsPlayer)
         {
             movesSinceLastFuelDecrease++;
             if (movesSinceLastFuelDecrease >= 5)
             {
-                Fuel -= 1; // Reduce fuel by 1 every 5 moves
+                Fuel -= 1;
                 movesSinceLastFuelDecrease = 0;
             }
         }
@@ -150,6 +106,57 @@ public class Motorcycle
         {
             Fuel = 100; // Enemies have infinite fuel
         }
+    }
+
+    private void ChooseSafeDirection(Map map)
+    {
+        List<Direction> safeDirections = new List<Direction>();
+        foreach (Direction dir in Enum.GetValues(typeof(Direction)))
+        {
+            Cell nextPosition = GetNextPosition(dir);
+            if (IsSafePosition(nextPosition, map))
+            {
+                safeDirections.Add(dir);
+            }
+        }
+
+        if (safeDirections.Count > 0)
+        {
+            CurrentDirection = safeDirections[new Random().Next(safeDirections.Count)];
+        }
+        // If no safe directions, keep current direction (will likely lead to destruction in the next move)
+    }
+
+    private bool IsSafePosition(Cell position, Map map)
+    {
+        // Check map boundaries
+        if (position.X < 0 || position.X >= map.Width || position.Y < 0 || position.Y >= map.Height)
+        {
+            return false;
+        }
+
+        // Check collision with any trail
+        return !IsCollidingWithTrail(position, map);
+    }
+
+    private bool IsCollidingWithTrail(Cell position, Map map)
+    {
+        foreach (var motorcycle in map.Motorcycles)
+        {
+            foreach (var cell in motorcycle.Trail)
+            {
+                if (position.X == cell.X && position.Y == cell.Y)
+                {
+                    // Don't consider the head of this motorcycle as a collision
+                    if (motorcycle == this && cell == Trail.First.Value)
+                    {
+                        continue;
+                    }
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private Cell GetNextPosition(Direction direction)
