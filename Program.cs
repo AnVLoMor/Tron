@@ -194,6 +194,7 @@ public class Map
     public int Width { get; private set; }
     public int Height { get; private set; }
     public List<Motorcycle> Motorcycles { get; private set; }
+    private Random rnd = new Random();
 
     public Map(int width, int height)
     {
@@ -209,6 +210,13 @@ public class Map
         }
     }
 
+    public void SpawnRandomPower()
+    {
+        int x = rnd.Next(0, Width);
+        int y = rnd.Next(0, Height);
+        Power.PowerType randomPowerType = (Power.PowerType)rnd.Next(4);
+        PowersOnMap.Add(new Power(randomPowerType) { Location = new Cell { X = x, Y = y } });
+    }
     public void SpawnItemsAndPowers()
     {
         Random rnd = new Random();
@@ -315,20 +323,20 @@ public class Game
     private int cellSize = 20;
     private int offsetX;
     private int offsetY;
+    private int powerSpawnCounter;
+    private const int PowerSpawnInterval = 5000; // 5 segundos en milisegundos
 
     public Game(int width, int height, int numPlayers, int formWidth, int formHeight)
     {
         map = new Map(width, height);
         motorcycles = new List<Motorcycle>();
 
-        // Initialize the player's motorcycle in a fixed position
         playerMotorcycle = new Motorcycle(5, 5, true);
         motorcycles.Add(playerMotorcycle);
 
         offsetX = (formWidth - (width * cellSize)) / 2;
         offsetY = (formHeight - (height * cellSize)) / 2;
 
-        // Initialize enemy motorcycles in random positions
         Random rnd = new Random();
         for (int i = 1; i < numPlayers; i++)
         {
@@ -337,9 +345,10 @@ public class Game
             motorcycles.Add(new Motorcycle(x, y, false));
         }
 
-        map.SpawnItemsAndPowers();
         map.Motorcycles.AddRange(motorcycles);
+        powerSpawnCounter = 0;
     }
+
 
     public List<Motorcycle> GetMotorcycles()
     {
@@ -356,7 +365,7 @@ public class Game
         return map;
     }
 
-    public void Update()
+    public void Update(int elapsedMilliseconds)
     {
         foreach (var motorcycle in motorcycles)
         {
@@ -364,13 +373,20 @@ public class Game
             {
                 motorcycle.Move(map);
 
-                // Check for collisions with powers
                 var collidedPower = map.CheckPowerCollision(motorcycle.Trail.First.Value);
                 if (collidedPower != null)
                 {
                     collidedPower.Activate(motorcycle);
                 }
             }
+        }
+
+        // Actualizar el contador y generar un nuevo poder cada 5 segundos
+        powerSpawnCounter += elapsedMilliseconds;
+        if (powerSpawnCounter >= PowerSpawnInterval)
+        {
+            map.SpawnRandomPower();
+            powerSpawnCounter = 0;
         }
     }
 
@@ -435,6 +451,7 @@ public class GameForm : Form
 {
     private Game game;
     private Timer gameTimer;
+    private DateTime lastUpdateTime;
 
     public GameForm()
     {
@@ -449,9 +466,11 @@ public class GameForm : Form
         this.Resize += new EventHandler(GameForm_Resize);
         
         gameTimer = new Timer();
-        gameTimer.Interval = 150; // Increased from 100 to 200 ms to slow down the game
+        gameTimer.Interval = 150; // Velocidad del juego
         gameTimer.Tick += new EventHandler(GameLoop);
         gameTimer.Start();
+
+        lastUpdateTime = DateTime.Now;
     }
 
     private void GameForm_Paint(object sender, PaintEventArgs e)
@@ -491,7 +510,10 @@ public class GameForm : Form
 
     private void GameLoop(object sender, EventArgs e)
     {
-        game.Update();
+        DateTime currentTime = DateTime.Now;
+        TimeSpan elapsedTime = currentTime - lastUpdateTime;
+        game.Update((int)elapsedTime.TotalMilliseconds);
+        lastUpdateTime = currentTime;
         this.Invalidate();
     }
 
