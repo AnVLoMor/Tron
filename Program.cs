@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
 using System.Drawing;
+using System.Linq;
 
 public enum Direction
 {
@@ -14,7 +15,6 @@ public enum Direction
 public class Motorcycle
 {
     public LinkedList<Cell> Trail { get; private set; }
-    public int Speed { get; set; }
     public int Fuel { get; set; }
     public Queue<Item> Items { get; private set; }
     public Stack<Power> Powers { get; private set; }
@@ -25,10 +25,11 @@ public class Motorcycle
     private int maxTrailLength = 10;
     public bool IsVisible { get; private set; }
     private int destructionTimer;
+    public int BaseSpeed { get; set; }
+    public int CurrentSpeed { get; private set; }
 
     public Motorcycle(int startX, int startY, bool isPlayer)
     {
-        Speed = new Random().Next(1, 11);
         Fuel = 100;
         Trail = new LinkedList<Cell>();
         Items = new Queue<Item>();
@@ -39,6 +40,8 @@ public class Motorcycle
         movesSinceLastFuelDecrease = 0;
         IsVisible = true;
         destructionTimer = 0;
+        BaseSpeed = new Random().Next(1, 2);
+        CurrentSpeed = BaseSpeed;
 
         // Inicializar la motocicleta y su estela con 11 elementos (1 moto + 10 de estela)
         Trail.AddLast(new Cell { X = startX, Y = startY }); // Moto
@@ -200,8 +203,28 @@ public class Motorcycle
     {
         if (Powers.Count > 0)
         {
-            Powers.Pop().Activate(this);
+            Power power = Powers.Pop();
+            power.Activate(this);
         }
+    }
+    public void RotatePowers()
+    {
+        if (Powers.Count > 1)
+        {
+            Power topPower = Powers.Pop();
+            Power[] remainingPowers = Powers.ToArray();
+            Powers.Clear();
+            Powers.Push(topPower);
+            foreach (Power power in remainingPowers.Reverse())
+            {
+                Powers.Push(power);
+            }
+        }
+    }
+
+    public void ResetSpeed()
+    {
+        CurrentSpeed = BaseSpeed;
     }
 }
 
@@ -346,7 +369,7 @@ public class Power
                 // Implementar lógica para hacer la motocicleta invencible
                 break;
             case PowerType.HyperSpeed:
-                motorcycle.Speed += new Random().Next(1, 6);
+                motorcycle.BaseSpeed += 1;
                 break;
             case PowerType.Bomb:
                 // Implementar lógica para la bomba
@@ -423,13 +446,15 @@ public class Game
             }
             else
             {
-                motorcycle.Move(map);
-
-                var collidedPower = map.CheckPowerCollision(motorcycle.Trail.First.Value);
-                if (collidedPower != null)
+                for (int j = 0; j < motorcycle.CurrentSpeed; j++)
                 {
-                    motorcycle.AddPower(collidedPower);  // Añadir el poder al Stack
-                    // No activamos el poder inmediatamente, solo lo guardamos
+                    motorcycle.Move(map);
+
+                    var collidedPower = map.CheckPowerCollision(motorcycle.Trail.First.Value);
+                    if (collidedPower != null)
+                    {
+                        motorcycle.AddPower(collidedPower);
+                    }
                 }
             }
         }
@@ -532,6 +557,18 @@ public class Game
             if (yOffset > InfoPanelHeight - 20) break;
         }
     }
+    
+    // Método para activar el poder del jugador
+    public void ActivatePlayerPower()
+    {
+        playerMotorcycle.UsePower();
+    }
+
+    // Método para rotar los poderes del jugador
+    public void RotatePlayerPowers()
+    {
+        playerMotorcycle.RotatePowers();
+    }
 }
 
 public class GameForm : Form
@@ -589,7 +626,10 @@ public class GameForm : Form
                 player.CurrentDirection = Direction.Right;
                 break;
             case Keys.Space:
-                player.UsePower();
+                game.ActivatePlayerPower();
+                break;
+            case Keys.R:
+                game.RotatePlayerPowers();
                 break;
         }
     }
@@ -599,6 +639,13 @@ public class GameForm : Form
         TimeSpan elapsedTime = currentTime - lastUpdateTime;
         game.Update((int)elapsedTime.TotalMilliseconds);
         lastUpdateTime = currentTime;
+
+        // Resetear la velocidad de las motocicletas después de cada actualización
+        foreach (var motorcycle in game.GetMotorcycles())
+        {
+            motorcycle.ResetSpeed();
+        }
+
         this.Invalidate();
     }
 
