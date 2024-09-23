@@ -18,7 +18,7 @@ public class Motorcycle
     public LinkedList<Cell> Trail { get; private set; }
     public int Fuel { get; set; }
     public Queue<Item> Items { get; private set; }
-    public Stack<Power> Powers { get; private set; }
+    public Stack<Power> Powers { get; private set; } = new Stack<Power>();
     public bool IsDestroyed { get; set; }
     public Direction CurrentDirection { get; set; }
     public bool IsPlayer { get; set; }
@@ -596,7 +596,6 @@ public class Game
                     if (collidedPower != null)
                     {
                         motorcycle.AddPower(collidedPower);
-                        collidedPower.Activate(motorcycle, map); // Asegúrate de que 'map' se pase aquí
                     }
                 }
             }
