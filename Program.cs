@@ -28,6 +28,8 @@ public class Motorcycle
     private int destructionTimer;
     public int BaseSpeed { get; set; }
     public int CurrentSpeed { get; private set; }
+    public bool IsInvincible { get; set; }
+    public bool IsShieldActive { get; private set; }
 
     public Motorcycle(int startX, int startY, bool isPlayer)
     {
@@ -43,6 +45,7 @@ public class Motorcycle
         destructionTimer = 0;
         BaseSpeed = new Random().Next(1, 2);
         CurrentSpeed = BaseSpeed;
+        IsInvincible = false;
 
         // Inicializar la motocicleta y su estela con 11 elementos (1 moto + 10 de estela)
         Trail.AddLast(new Cell { X = startX, Y = startY }); // Moto
@@ -66,6 +69,15 @@ public class Motorcycle
     {
         Powers.Push(power);
     }
+    public void ActivateShield()
+    {
+        IsShieldActive = true;
+    }
+
+    public void DeactivateShield()
+    {
+        IsShieldActive = false;
+    }
     public void Move(Map map)
     {
         if (Fuel <= 0 || IsDestroyed)
@@ -85,12 +97,12 @@ public class Motorcycle
         // Check if the next position is out of bounds or colliding with any trail
         if (!IsSafePosition(nextPosition, map))
         {
-            if (IsPlayer)
+            if (IsPlayer && !IsShieldActive)
             {
                 IsDestroyed = true;
                 return;
             }
-            else
+            else if (!IsPlayer)
             {
                 // If it's an enemy, try to find a safe direction again
                 ChooseSafeDirection(map);
@@ -155,6 +167,12 @@ public class Motorcycle
         if (position.X < 0 || position.X >= map.Width || position.Y < 0 || position.Y >= map.Height)
         {
             return false;
+        }
+
+        // If shield is active, consider all positions safe
+        if (IsShieldActive)
+        {
+            return true;
         }
 
         // Check collision with any trail
@@ -367,7 +385,7 @@ public class Power
                 motorcycle.Fuel = Math.Min(100, motorcycle.Fuel + 20);
                 break;
             case PowerType.Shield:
-                // Implementar lógica para hacer la motocicleta invencible
+                ActivateShield(motorcycle);
                 break;
             case PowerType.HyperSpeed:
                 ActivateHyperSpeed(motorcycle);
@@ -376,6 +394,14 @@ public class Power
                 // Implementar lógica para la bomba
                 break;
         }
+    }
+    private void ActivateShield(Motorcycle motorcycle)
+    {
+        motorcycle.ActivateShield();
+        Task.Delay(7000).ContinueWith(_ =>
+        {
+            motorcycle.DeactivateShield();
+        });
     }
     private void ActivateHyperSpeed(Motorcycle motorcycle)
     {
@@ -501,16 +527,26 @@ public class Game
 
         // Dibuja las motocicletas y sus estelas
         foreach (var motorcycle in motorcycles)
+    {
+        if (motorcycle.IsVisible)
         {
-            if (motorcycle.IsVisible)
+            Brush brush = motorcycle.IsPlayer ? new SolidBrush(Color.FromArgb(173, 216, 230)) : Brushes.Red;
+            foreach (var cell in motorcycle.Trail)
             {
-                Brush brush = motorcycle.IsPlayer ? new SolidBrush(Color.FromArgb(173, 216, 230)) : Brushes.Red;
-                foreach (var cell in motorcycle.Trail)
-                {
-                    g.FillRectangle(brush, offsetX + cell.X * cellSize, offsetY + cell.Y * cellSize, cellSize, cellSize);
-                }
+                g.FillRectangle(brush, offsetX + cell.X * cellSize, offsetY + cell.Y * cellSize, cellSize, cellSize);
+            }
+
+            // Dibuja el escudo si está activo
+            if (motorcycle.IsShieldActive)
+            {
+                var head = motorcycle.Trail.First.Value;
+                g.DrawEllipse(new Pen(Color.Purple, 2), 
+                    offsetX + head.X * cellSize - cellSize / 2, 
+                    offsetY + head.Y * cellSize - cellSize / 2, 
+                    cellSize * 2, cellSize * 2);
             }
         }
+    }
 
         // Dibuja los poderes en el mapa
         foreach (var power in map.PowersOnMap)
