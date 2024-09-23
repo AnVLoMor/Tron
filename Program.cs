@@ -24,6 +24,7 @@ public class Motorcycle
     public bool IsPlayer { get; set; }
     private int movesSinceLastFuelDecrease;
     private int maxTrailLength = 10;
+    public int MaxTrailLength { get; private set; } = 10;
     public bool IsVisible { get; private set; }
     private int destructionTimer;
     public int BaseSpeed { get; set; }
@@ -218,12 +219,12 @@ public class Motorcycle
         }
     }
 
-    public void UsePower()
+    public void UsePower(Map map)
     {
         if (Powers.Count > 0)
         {
             Power power = Powers.Pop();
-            power.Activate(this);
+            power.Activate(this, map);
         }
     }
     public void RotatePowers()
@@ -255,6 +256,7 @@ public class Map
     public int Height { get; private set; }
     public List<Motorcycle> Motorcycles { get; set; }
     private Random rnd = new Random();
+    public List<Bomb> ActiveBombs { get; private set; } = new List<Bomb>();
 
     public Map(int width, int height)
     {
@@ -331,6 +333,80 @@ public class Map
         }
         return false;
     }
+    public void PlaceBomb(Cell location, Motorcycle owner)
+    {
+        ActiveBombs.Add(new Bomb(location, owner));
+    }
+    private void Explode(Bomb bomb)
+    {
+        int explosionRange = 4; // This will create a 4x4 area
+
+        for (int x = bomb.Location.X - explosionRange; x <= bomb.Location.X + explosionRange; x++)
+        {
+            for (int y = bomb.Location.Y - explosionRange; y <= bomb.Location.Y + explosionRange; y++)
+            {
+                if (x >= 0 && x < Width && y >= 0 && y < Height)
+                {
+                    DestroyAtLocation(new Cell { X = x, Y = y });
+                }
+            }
+        }
+    }
+    private void DestroyAtLocation(Cell location)
+    {
+        // Destroy motorcycles
+        foreach (var motorcycle in Motorcycles)
+        {
+            if (motorcycle.Trail.Any(cell => cell.X == location.X && cell.Y == location.Y))
+            {
+                if (motorcycle.Trail.First.Value.X == location.X && motorcycle.Trail.First.Value.Y == location.Y)
+                {
+                    motorcycle.IsDestroyed = true;
+                }
+                else
+                {
+                    // Remove trail segments at this location
+                    var nodesToRemove = new List<LinkedListNode<Cell>>();
+                    var currentNode = motorcycle.Trail.First;
+                    while (currentNode != null)
+                    {
+                        if (currentNode.Value.X == location.X && currentNode.Value.Y == location.Y)
+                        {
+                            nodesToRemove.Add(currentNode);
+                        }
+                        currentNode = currentNode.Next;
+                    }
+
+                    foreach (var node in nodesToRemove)
+                    {
+                        motorcycle.Trail.Remove(node);
+                    }
+                    
+                    // Regenerate trail if it's below the maximum length
+                    while (motorcycle.Trail.Count < motorcycle.MaxTrailLength)
+                    {
+                        var lastCell = motorcycle.Trail.Last.Value;
+                        motorcycle.Trail.AddLast(new Cell { X = lastCell.X, Y = lastCell.Y });
+                    }
+                }
+            }
+        }
+
+        // Destroy powers
+        PowersOnMap.RemoveAll(power => power.Location.X == location.X && power.Location.Y == location.Y);
+    }
+    public void UpdateBombs(int elapsedMilliseconds)
+    {
+        for (int i = ActiveBombs.Count - 1; i >= 0; i--)
+        {
+            ActiveBombs[i].Update(elapsedMilliseconds);
+            if (ActiveBombs[i].ShouldExplode)
+            {
+                Explode(ActiveBombs[i]);
+                ActiveBombs.RemoveAt(i);
+            }
+        }
+    }
 }
 
 public class Cell
@@ -367,6 +443,30 @@ public class Item
     }
 }
 
+public class Bomb
+{
+    public Cell Location { get; private set; }
+    public Motorcycle Owner { get; private set; }
+    public bool ShouldExplode { get; private set; }
+    private int timer;
+
+    public Bomb(Cell location, Motorcycle owner)
+    {
+        Location = location;
+        Owner = owner;
+        timer = 0;
+        ShouldExplode = false;
+    }
+
+    public void Update(int elapsedMilliseconds)
+    {
+        timer += elapsedMilliseconds;
+        if (timer >= 3000) // Explode after 3 seconds
+        {
+            ShouldExplode = true;
+        }
+    }
+}
 public class Power
 {
     public enum PowerType { Fuel, Shield, HyperSpeed, Bomb }
@@ -377,7 +477,7 @@ public class Power
     {
         Type = type;
     }
-    public void Activate(Motorcycle motorcycle)
+    public void Activate(Motorcycle motorcycle, Map map)
     {
         switch (Type)
         {
@@ -391,7 +491,7 @@ public class Power
                 ActivateHyperSpeed(motorcycle);
                 break;
             case PowerType.Bomb:
-                // Implementar lógica para la bomba
+                ActivateBomb(motorcycle, map);
                 break;
         }
     }
@@ -410,6 +510,11 @@ public class Power
         {
             motorcycle.BaseSpeed -= 1; // Restablece la velocidad después de 7 segundos
         });
+    }
+    private void ActivateBomb(Motorcycle motorcycle, Map map)
+    {
+        var bombLocation = motorcycle.Trail.First.Value;
+        map.PlaceBomb(bombLocation, motorcycle);
     }
 }
 
@@ -467,6 +572,8 @@ public class Game
 
     public void Update(int elapsedMilliseconds)
     {
+        map.UpdateBombs(elapsedMilliseconds);
+        
         for (int i = motorcycles.Count - 1; i >= 0; i--)
         {
             var motorcycle = motorcycles[i];
@@ -489,6 +596,7 @@ public class Game
                     if (collidedPower != null)
                     {
                         motorcycle.AddPower(collidedPower);
+                        collidedPower.Activate(motorcycle, map); // Asegúrate de que 'map' se pase aquí
                     }
                 }
             }
@@ -527,26 +635,34 @@ public class Game
 
         // Dibuja las motocicletas y sus estelas
         foreach (var motorcycle in motorcycles)
-    {
-        if (motorcycle.IsVisible)
         {
-            Brush brush = motorcycle.IsPlayer ? new SolidBrush(Color.FromArgb(173, 216, 230)) : Brushes.Red;
-            foreach (var cell in motorcycle.Trail)
+            if (motorcycle.IsVisible)
             {
-                g.FillRectangle(brush, offsetX + cell.X * cellSize, offsetY + cell.Y * cellSize, cellSize, cellSize);
-            }
+                Brush brush = motorcycle.IsPlayer ? new SolidBrush(Color.FromArgb(173, 216, 230)) : Brushes.Red;
+                foreach (var cell in motorcycle.Trail)
+                {
+                    g.FillRectangle(brush, offsetX + cell.X * cellSize, offsetY + cell.Y * cellSize, cellSize, cellSize);
+                }
 
-            // Dibuja el escudo si está activo
-            if (motorcycle.IsShieldActive)
-            {
-                var head = motorcycle.Trail.First.Value;
-                g.DrawEllipse(new Pen(Color.Purple, 2), 
-                    offsetX + head.X * cellSize - cellSize / 2, 
-                    offsetY + head.Y * cellSize - cellSize / 2, 
-                    cellSize * 2, cellSize * 2);
+                // Dibuja el escudo si está activo
+                if (motorcycle.IsShieldActive)
+                {
+                    var head = motorcycle.Trail.First.Value;
+                    g.DrawEllipse(new Pen(Color.Purple, 2), 
+                        offsetX + head.X * cellSize - cellSize / 2, 
+                        offsetY + head.Y * cellSize - cellSize / 2, 
+                        cellSize * 2, cellSize * 2);
+                }
             }
         }
-    }
+        // Draw bombs
+        foreach (var bomb in map.ActiveBombs)
+        {
+            g.FillEllipse(Brushes.Black, 
+                offsetX + bomb.Location.X * cellSize + cellSize/4, 
+                offsetY + bomb.Location.Y * cellSize + cellSize/4, 
+                cellSize/2, cellSize/2);
+        }
 
         // Dibuja los poderes en el mapa
         foreach (var power in map.PowersOnMap)
@@ -606,7 +722,7 @@ public class Game
     // Método para activar el poder del jugador
     public void ActivatePlayerPower()
     {
-        playerMotorcycle.UsePower();
+        playerMotorcycle.UsePower(map);
     }
 
     // Método para rotar los poderes del jugador
