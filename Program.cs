@@ -23,6 +23,8 @@ public class Motorcycle
     public bool IsPlayer { get; set; }
     private int movesSinceLastFuelDecrease;
     private int maxTrailLength = 10;
+    public bool IsVisible { get; private set; }
+    private int destructionTimer;
 
     public Motorcycle(int startX, int startY, bool isPlayer)
     {
@@ -35,12 +37,25 @@ public class Motorcycle
         CurrentDirection = (Direction)new Random().Next(4);
         IsPlayer = isPlayer;
         movesSinceLastFuelDecrease = 0;
+        IsVisible = true;
+        destructionTimer = 0;
 
         // Inicializar la motocicleta y su estela con 11 elementos (1 moto + 10 de estela)
         Trail.AddLast(new Cell { X = startX, Y = startY }); // Moto
         for (int i = 1; i <= 3; i++)
         {
             Trail.AddLast(new Cell { X = startX, Y = startY + i }); // Estela
+        }
+    }
+    public void Update(int elapsedMilliseconds)
+    {
+        if (IsDestroyed && IsVisible)
+        {
+            destructionTimer += elapsedMilliseconds;
+            if (destructionTimer >= 2000) // 2 segundos
+            {
+                IsVisible = false;
+            }
         }
     }
     public void AddPower(Power power)
@@ -384,6 +399,10 @@ public class Game
                     collidedPower.Activate(motorcycle);
                 }
             }
+            else
+            {
+                motorcycle.Update(elapsedMilliseconds);
+            }
         }
 
         // Actualizar el contador y generar un nuevo poder cada 5 segundos
@@ -417,10 +436,13 @@ public class Game
         // Dibuja las motocicletas y sus estelas
         foreach (var motorcycle in motorcycles)
         {
-            Brush brush = motorcycle.IsPlayer ? new SolidBrush(Color.FromArgb(173, 216, 230)) : Brushes.Red; // Celeste claro
-            foreach (var cell in motorcycle.Trail)
+            if (motorcycle.IsVisible)
             {
-                g.FillRectangle(brush, offsetX + cell.X * cellSize, offsetY + cell.Y * cellSize, cellSize, cellSize);
+                Brush brush = motorcycle.IsPlayer ? new SolidBrush(Color.FromArgb(173, 216, 230)) : Brushes.Red;
+                foreach (var cell in motorcycle.Trail)
+                {
+                    g.FillRectangle(brush, offsetX + cell.X * cellSize, offsetY + cell.Y * cellSize, cellSize, cellSize);
+                }
             }
         }
 
