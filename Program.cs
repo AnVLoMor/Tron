@@ -43,7 +43,10 @@ public class Motorcycle
             Trail.AddLast(new Cell { X = startX, Y = startY + i }); // Estela
         }
     }
-
+    public void AddPower(Power power)
+    {
+        Powers.Push(power);
+    }
     public void Move(Map map)
     {
         if (Fuel <= 0 || IsDestroyed)
@@ -325,6 +328,8 @@ public class Game
     private int offsetY;
     private int powerSpawnCounter;
     private const int PowerSpawnInterval = 5000; // 5 segundos en milisegundos
+    private const int InfoPanelWidth = 170;
+    private const int InfoPanelHeight = 150;
 
     public Game(int width, int height, int numPlayers, int formWidth, int formHeight)
     {
@@ -426,25 +431,53 @@ public class Game
             switch (power.Type)
             {
                 case Power.PowerType.Shield:
-                    powerBrush = Brushes.Purple; // Morado para el escudo
+                    powerBrush = Brushes.Purple;
                     break;
                 case Power.PowerType.HyperSpeed:
-                    powerBrush = Brushes.Yellow; // Amarillo para la hipervelocidad
+                    powerBrush = Brushes.Yellow;
                     break;
                 case Power.PowerType.Fuel:
-                    powerBrush = Brushes.Green; // Verde para la gasolina
+                    powerBrush = Brushes.Green;
                     break;
                 case Power.PowerType.Bomb:
-                    powerBrush = Brushes.Orange; // Anaranjado para las bombas
+                    powerBrush = Brushes.Orange;
                     break;
                 default:
-                    powerBrush = Brushes.Gray; // Valor por defecto para evitar errores
+                    powerBrush = Brushes.Gray;
                     break;
             }
             g.FillRectangle(powerBrush, offsetX + power.Location.X * cellSize, offsetY + power.Location.Y * cellSize, cellSize, cellSize);
         }
-    }
 
+        // Dibuja el panel de información
+        DrawInfoPanel(g);
+    }
+    private void DrawInfoPanel(Graphics g)
+    {
+        int panelX = offsetX + map.Width * cellSize + 10;
+        int panelY = offsetY;
+
+        // Dibuja el fondo del panel
+        g.FillRectangle(Brushes.LightGray, panelX, panelY, InfoPanelWidth, InfoPanelHeight);
+
+        // Dibuja el borde del panel
+        g.DrawRectangle(Pens.Black, panelX, panelY, InfoPanelWidth, InfoPanelHeight);
+
+        // Muestra la cantidad de combustible
+        g.DrawString($"Fuel: {playerMotorcycle.Fuel}", new Font("Arial", 12), Brushes.Black, panelX + 10, panelY + 10);
+
+        // Muestra los poderes guardados
+        g.DrawString("Powers:", new Font("Arial", 12), Brushes.Black, panelX + 10, panelY + 40);
+        int yOffset = 60;
+        foreach (var power in playerMotorcycle.Powers)
+        {
+            g.DrawString(power.Type.ToString(), new Font("Arial", 10), Brushes.Black, panelX + 20, panelY + yOffset);
+            yOffset += 20;
+            
+            // Si el panel se llena, detén el dibujo de poderes
+            if (yOffset > InfoPanelHeight - 20) break;
+        }
+    }
 }
 
 public class GameForm : Form
@@ -455,7 +488,7 @@ public class GameForm : Form
 
     public GameForm()
     {
-        this.Width = 1000;
+        this.Width = 1200;
         this.Height = 800;
         this.StartPosition = FormStartPosition.CenterScreen;
         this.BackColor = Color.Black; // Cambia el color de fondo de la forma
@@ -477,7 +510,6 @@ public class GameForm : Form
     {
         game.Draw(e.Graphics);
     }
-
     private void GameForm_Resize(object sender, EventArgs e)
     {
         // Recrea el juego con las nuevas dimensiones del formulario
@@ -507,7 +539,6 @@ public class GameForm : Form
                 break;
         }
     }
-
     private void GameLoop(object sender, EventArgs e)
     {
         DateTime currentTime = DateTime.Now;
