@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Windows.Forms;
 using System.Drawing;
 using System.Linq;
+using System.Threading.Tasks;
 
 public enum Direction
 {
@@ -369,12 +370,20 @@ public class Power
                 // Implementar lógica para hacer la motocicleta invencible
                 break;
             case PowerType.HyperSpeed:
-                motorcycle.BaseSpeed += 1;
+                ActivateHyperSpeed(motorcycle);
                 break;
             case PowerType.Bomb:
                 // Implementar lógica para la bomba
                 break;
         }
+    }
+    private void ActivateHyperSpeed(Motorcycle motorcycle)
+    {
+        motorcycle.BaseSpeed += 1; // Aumenta la velocidad actual
+        Task.Delay(7000).ContinueWith(_ =>
+        {
+            motorcycle.BaseSpeed -= 1; // Restablece la velocidad después de 7 segundos
+        });
     }
 }
 
