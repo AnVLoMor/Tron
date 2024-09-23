@@ -211,7 +211,7 @@ public class Map
     public List<Power> PowersOnMap { get; private set; }
     public int Width { get; private set; }
     public int Height { get; private set; }
-    public List<Motorcycle> Motorcycles { get; private set; }
+    public List<Motorcycle> Motorcycles { get; set; }
     private Random rnd = new Random();
 
     public Map(int width, int height)
@@ -268,6 +268,26 @@ public class Map
         }
 
         return collidedPower;
+    }
+    public bool IsCollidingWithTrail(Cell position)
+    {
+        foreach (var motorcycle in Motorcycles)
+        {
+            if (motorcycle.IsDestroyed) continue;
+
+            foreach (var cell in motorcycle.Trail)
+            {
+                if (position.X == cell.X && position.Y == cell.Y)
+                {
+                    if (cell == motorcycle.Trail.First.Value)
+                    {
+                        continue;
+                    }
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }
 
@@ -387,9 +407,20 @@ public class Game
 
     public void Update(int elapsedMilliseconds)
     {
-        foreach (var motorcycle in motorcycles)
+        for (int i = motorcycles.Count - 1; i >= 0; i--)
         {
-            if (!motorcycle.IsDestroyed)
+            var motorcycle = motorcycles[i];
+            
+            if (motorcycle.IsDestroyed)
+            {
+                if (!motorcycle.IsPlayer)
+                {
+                    // Eliminar completamente la moto enemiga destruida
+                    motorcycles.RemoveAt(i);
+                    continue;
+                }
+            }
+            else
             {
                 motorcycle.Move(map);
 
@@ -399,11 +430,10 @@ public class Game
                     collidedPower.Activate(motorcycle);
                 }
             }
-            else
-            {
-                motorcycle.Update(elapsedMilliseconds);
-            }
         }
+
+        // Actualizar la lista de motos en el mapa
+        map.Motorcycles = motorcycles;
 
         // Actualizar el contador y generar un nuevo poder cada 5 segundos
         powerSpawnCounter += elapsedMilliseconds;
