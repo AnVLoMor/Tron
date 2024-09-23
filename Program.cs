@@ -335,7 +335,6 @@ public class Power
     {
         Type = type;
     }
-
     public void Activate(Motorcycle motorcycle)
     {
         switch (Type)
@@ -344,10 +343,13 @@ public class Power
                 motorcycle.Fuel = Math.Min(100, motorcycle.Fuel + 20);
                 break;
             case PowerType.Shield:
-                // Logic to make the motorcycle invincible
+                // Implementar lógica para hacer la motocicleta invencible
                 break;
             case PowerType.HyperSpeed:
                 motorcycle.Speed += new Random().Next(1, 6);
+                break;
+            case PowerType.Bomb:
+                // Implementar lógica para la bomba
                 break;
         }
     }
@@ -415,7 +417,6 @@ public class Game
             {
                 if (!motorcycle.IsPlayer)
                 {
-                    // Eliminar completamente la moto enemiga destruida
                     motorcycles.RemoveAt(i);
                     continue;
                 }
@@ -427,7 +428,8 @@ public class Game
                 var collidedPower = map.CheckPowerCollision(motorcycle.Trail.First.Value);
                 if (collidedPower != null)
                 {
-                    collidedPower.Activate(motorcycle);
+                    motorcycle.AddPower(collidedPower);  // Añadir el poder al Stack
+                    // No activamos el poder inmediatamente, solo lo guardamos
                 }
             }
         }
@@ -479,30 +481,28 @@ public class Game
         // Dibuja los poderes en el mapa
         foreach (var power in map.PowersOnMap)
         {
-            Brush powerBrush;
-            switch (power.Type)
-            {
-                case Power.PowerType.Shield:
-                    powerBrush = Brushes.Purple;
-                    break;
-                case Power.PowerType.HyperSpeed:
-                    powerBrush = Brushes.Yellow;
-                    break;
-                case Power.PowerType.Fuel:
-                    powerBrush = Brushes.Green;
-                    break;
-                case Power.PowerType.Bomb:
-                    powerBrush = Brushes.Orange;
-                    break;
-                default:
-                    powerBrush = Brushes.Gray;
-                    break;
-            }
+            Brush powerBrush = GetPowerBrush(power.Type);
             g.FillRectangle(powerBrush, offsetX + power.Location.X * cellSize, offsetY + power.Location.Y * cellSize, cellSize, cellSize);
         }
 
         // Dibuja el panel de información
         DrawInfoPanel(g);
+    }
+    private Brush GetPowerBrush(Power.PowerType type)
+    {
+        switch (type)
+        {
+            case Power.PowerType.Shield:
+                return Brushes.Purple;
+            case Power.PowerType.HyperSpeed:
+                return Brushes.Yellow;
+            case Power.PowerType.Fuel:
+                return Brushes.Green;
+            case Power.PowerType.Bomb:
+                return Brushes.Orange;
+            default:
+                return Brushes.Gray;
+        }
     }
     private void DrawInfoPanel(Graphics g)
     {
@@ -523,7 +523,9 @@ public class Game
         int yOffset = 60;
         foreach (var power in playerMotorcycle.Powers)
         {
-            g.DrawString(power.Type.ToString(), new Font("Arial", 10), Brushes.Black, panelX + 20, panelY + yOffset);
+            Brush powerBrush = GetPowerBrush(power.Type);
+            g.FillRectangle(powerBrush, panelX + 10, panelY + yOffset, 15, 15);
+            g.DrawString(power.Type.ToString(), new Font("Arial", 10), Brushes.Black, panelX + 30, panelY + yOffset);
             yOffset += 20;
             
             // Si el panel se llena, detén el dibujo de poderes
